@@ -110,7 +110,7 @@ The package manifest currently includes these major dependencies:
 
 6. Start rosbridge, the target-detection node, and the UAV bridge, then enter Play mode in Unity.
 
-> The current `EditorBuildSettings.asset` does not contain a build-scene list. Before creating a standalone build, add `Assets/Scenes/Image_Process.unity` in **File > Build Settings**.
+`Assets/Scenes/Image_Process.unity` is already registered as the default build scene.
 
 ## ROS Topics
 
@@ -182,10 +182,6 @@ Add `TargetCandidateMockTester` to a scene object and assign its subscriber and 
 - Confirm that a non-expired candidate is selected.
 - Confirm that no command is already pending.
 - Review the displayed positioning, altitude, flight-mode, and flight-control readiness information.
-
-### A standalone build starts with an empty scene
-
-Add `Assets/Scenes/Image_Process.unity` to the Unity build-scene list before building.
 
 ## Scope and Limitations
 
