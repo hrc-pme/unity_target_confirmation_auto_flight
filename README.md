@@ -1,82 +1,78 @@
-# Unity UAV Target Confirmation & Autonomous Flight
+# Unity UAV Target Confirmation and Autonomous Flight
 
-以 Unity 建置的無人機目標確認介面。系統透過 ROS bridge 接收即時影像、候選目標與 UAV 遙測資料，讓操作員在 Unity 儀表板中檢視候選物、確認目標，並送出飛行命令，使 UAV 前往已確認目標上方 **20 公尺**。
+A Unity-based operator dashboard for reviewing UAV target candidates, confirming a selected target, and commanding the aircraft to approach the confirmed position. The final command height is fixed at **20 metres above the target**.
 
-> 本儲存庫目前保存 Unity 的 `Assets/`。專案開發版本為 **Unity 2022.3.51f1 (LTS)**。
+The client receives annotated camera images, target detections, flight telemetry, and command status messages through ROS bridge. It also places a 3D UAV model on a Cesium globe using live geographic coordinates.
 
-## 主要功能
+> [!CAUTION]
+> This project can publish commands that affect a physical UAV. Validate the full workflow in simulation, keep a manual takeover path available, configure geofencing and failsafes, and comply with local aviation and site-safety rules before conducting a real flight.
 
-- 接收並顯示 UAV 相機的壓縮影像
-- 顯示目標類別、追蹤 ID、GPS 位置、定位誤差與預覽圖
-- 支援多個候選目標的上一筆／下一筆切換
-- 依 ROS 回傳狀態控制「確認」按鈕，避免在條件未完成時送出命令
-- 發布目標確認與取消命令
-- 接收命令狀態：接受、執行、抵達、拒絕或失敗
-- 以 Cesium 經緯度座標更新 3D 無人機位置
-- 支援 GPS、相對高度、飛行模式、Arm 狀態及 IMU 姿態顯示
-- 內建 Mock 測試快捷鍵，可在沒有 ROS 環境時驗證 UI 流程
+## Features
 
-## 系統流程
+- Displays a live annotated camera stream in the Unity UI
+- Receives target candidates with track IDs, classes, confidence scores, GPS coordinates, position error, and preview images
+- Lets the operator move between multiple target candidates
+- Enables confirmation only when the ROS-side safety and validation conditions are satisfied
+- Publishes target-confirmation and cancellation commands
+- Tracks command states such as accepted, executing, arrived, rejected, and failed
+- Displays UAV GPS position, relative height, flight mode, armed state, satellite count, and positioning accuracy
+- Updates a Cesium-anchored 3D UAV model from telemetry and optional IMU orientation
+- Includes a mock test component for validating the UI without a live ROS connection
+
+## System Architecture
 
 ```text
-相機 / 目標偵測 / UAV 飛控
-            │
-            ▼
-         ROS bridge
-            │
-   ┌────────┼───────────────┐
-   ▼        ▼               ▼
-即時影像   候選目標 JSON    UAV 遙測 / IMU
-   │        │               │
-   └────────┴──────┬────────┘
-                   ▼
-          Unity 操作員儀表板
-                   │
-        選擇目標 → 人工確認 / 取消
-                   │
-                   ▼
-          ROS 目標命令與狀態回報
-                   │
-                   ▼
-       UAV 前往確認目標上方 20 m
+Camera / detector / flight controller
+                 |
+                 v
+             ROS bridge
+                 |
+      +----------+-----------+
+      |          |           |
+      v          v           v
+ Live image   Candidate    UAV telemetry
+              JSON data      and IMU
+      |          |           |
+      +----------+-----------+
+                 |
+                 v
+        Unity operator dashboard
+                 |
+       Select and confirm target
+                 |
+                 v
+       Target command and status
+                 |
+                 v
+    UAV approaches target at 20 m
 ```
 
-## 核心 ROS Topics
+## Repository Contents
 
-| Topic | 類型 | 方向 | 用途 |
-|---|---|---|---|
-| `/d455i/color/image_annotated/compressed` | `sensor_msgs/CompressedImage` | ROS → Unity | 即時標註影像 |
-| `/unity/detections_json` | `std_msgs/String` (JSON) | ROS → Unity | 候選目標、座標、信心值與確認條件 |
-| `/uav/telemetry_json` | `std_msgs/String` (JSON) | ROS → Unity | GPS、高度、飛行模式、Arm 與定位狀態 |
-| `/uav/imu` | `sensor_msgs/Imu` | ROS → Unity | UAV 姿態（選用） |
-| `/unity/target_command` | `std_msgs/String` (JSON) | Unity → ROS | 確認目標或取消任務 |
-| `/unity/target_command_status` | `std_msgs/String` (JSON) | ROS → Unity | 命令接受、執行、抵達、拒絕與失敗狀態 |
+This repository contains the three Unity project directories required to reproduce the editor project:
 
-Topics 可在各元件的 Inspector 中調整；上表為程式預設值。
+```text
+.
+├── Assets/            # Scenes, scripts, models, plug-ins, and Unity metadata
+├── Packages/          # Unity Package Manager manifest and lock file
+├── ProjectSettings/   # Unity editor and project configuration
+├── .gitignore
+└── README.md
+```
 
-## 主要腳本
+Generated local directories such as `Library/`, `Temp/`, `Logs/`, `Obj/`, `Build/`, and `UserSettings/` are intentionally excluded.
 
-| 路徑 | 說明 |
-|---|---|
-| `Assets/Script/UAVDashboard/CompressedImageUIReceiver.cs` | 接收壓縮影像並更新 Unity `RawImage` |
-| `Assets/Script/UAVDashboard/TargetCandidateSubscriber.cs` | 訂閱並解析候選目標 JSON |
-| `Assets/Script/UAVDashboard/TargetSelectionUIController.cs` | 管理候選目標、確認視窗、按鈕狀態與操作流程 |
-| `Assets/Script/UAVDashboard/TargetCommandPublisher.cs` | 發布確認／取消命令並追蹤命令結果；最終高度固定為 20 m |
-| `Assets/Script/UAVDashboard/UavRosBridgeStateReceiver.cs` | 接收 GPS、遙測與 IMU，更新 Cesium 無人機模型 |
-| `Assets/Script/UAVDashboard/TargetCandidateMockTester.cs` | 不連接 ROS 時的本機 UI 與狀態測試 |
+## Requirements
 
-## 使用方式
+- Unity **2022.3.51f1 LTS**
+- A ROS environment providing rosbridge WebSocket connectivity
+- The UAV target-detection and flight-control bridge that implements the topics described below
+- Git, with Git LFS recommended for future additions of large binary assets
 
-### 1. 建立或準備 Unity 專案
-
-使用 Unity Hub 建立 **Unity 2022.3.51f1** 專案，關閉 Unity 後，將本儲存庫的 `Assets/` 放入專案根目錄。
-
-### 2. 安裝必要套件
-
-此專案資源使用下列主要套件：
+The package manifest currently includes these major dependencies:
 
 - Cesium for Unity `1.23.3`
-- ROS#（Siemens ROS Sharp）
+- Siemens ROS#
 - Unity Robotics ROS-TCP-Connector
 - TextMeshPro `3.0.7`
 - XR Interaction Toolkit `2.6.3`
@@ -85,60 +81,116 @@ Topics 可在各元件的 Inspector 中調整；上表為程式預設值。
 - Meta XR SDK `69.0.1`
 - Animation Rigging `1.2.1`
 
-若使用既有完整專案，請保留原本的 `Packages/manifest.json` 與 `ProjectSettings/`，Unity 會依設定還原套件。
+## Quick Start
 
-### 3. 設定 ROS 連線
+1. Clone the repository:
 
-1. 在場景中找到 `RosConnector`。
-2. 將 WebSocket URL 設為 ROS bridge 主機，例如 `ws://<ROS_IP>:9090`。
-3. 確認偵測、遙測、影像與命令 Topics 與 ROS 端一致。
-4. 啟動 rosbridge、目標偵測節點與 UAV bridge。
-5. 在 Unity 按下 Play，確認影像、GPS 與候選目標開始更新。
+   ```bash
+   git clone https://github.com/Xin-Chun-1122/unity_target_confirmation_auto_flight.git
+   cd unity_target_confirmation_auto_flight
+   ```
 
-### 4. 確認目標
+2. In Unity Hub, choose **Add project from disk** and select the cloned repository.
 
-1. 使用上一筆／下一筆按鈕檢視候選目標。
-2. 確認追蹤 ID、座標、信心值、位置誤差與預覽影像。
-3. 系統顯示 `ready_for_confirm` 且無阻擋條件時，按下 **Confirm**。
-4. Unity 發布命令後，介面會顯示 UAV 的接受、執行與抵達狀態。
-5. 最終任務高度由程式固定為目標上方 **20 m**。
+3. Open it with **Unity 2022.3.51f1** and allow Unity Package Manager to restore the packages in `Packages/manifest.json`.
 
-## 無 ROS 測試
+4. Open the primary scene:
 
-場景若掛載 `TargetCandidateMockTester`，可使用以下快捷鍵測試完整 UI 狀態：
+   ```text
+   Assets/Scenes/Image_Process.unity
+   ```
 
-| 按鍵 | 動作 |
+5. Configure the ROS bridge endpoint. The UAV dashboard currently enforces the following default in `Assets/Script/UAVDashboard/TargetCandidateData.cs`:
+
+   ```text
+   ws://10.0.0.8:9090
+   ```
+
+   Change `UavDashboardRos.OrinRosBridgeUrl` if the ROS computer uses a different address.
+
+6. Start rosbridge, the target-detection node, and the UAV bridge, then enter Play mode in Unity.
+
+> The current `EditorBuildSettings.asset` does not contain a build-scene list. Before creating a standalone build, add `Assets/Scenes/Image_Process.unity` in **File > Build Settings**.
+
+## ROS Topics
+
+| Topic | Message type | Direction | Purpose |
+|---|---|---|---|
+| `/d455i/color/image_annotated/compressed` | `sensor_msgs/CompressedImage` | ROS to Unity | Live annotated camera image |
+| `/unity/detections_json` | `std_msgs/String` (JSON) | ROS to Unity | Target candidates and confirmation readiness |
+| `/uav/telemetry_json` | `std_msgs/String` (JSON) | ROS to Unity | GPS, altitude, flight mode, armed state, and accuracy |
+| `/uav/imu` | `sensor_msgs/Imu` | ROS to Unity | Optional UAV orientation |
+| `/unity/target_command` | `std_msgs/String` (JSON) | Unity to ROS | Target confirmation or cancellation command |
+| `/unity/target_command_status` | `std_msgs/String` (JSON) | ROS to Unity | Command execution status |
+
+These are the script defaults. Topic names can be adjusted in the corresponding Unity components when required.
+
+## Operator Workflow
+
+1. Wait for the camera, UAV telemetry, and candidate feeds to become active.
+2. Review each candidate's image, track ID, target class, coordinates, confidence score, and position error.
+3. Use the previous and next controls to select the intended candidate.
+4. Confirm only after the interface reports that the candidate is ready and no confirmation blockers remain.
+5. Monitor the returned command state while the UAV approaches the target.
+6. Use the cancel control if the operation must be stopped.
+
+`TargetCommandPublisher` forces `hoverHeightRelativeM` to `20.0`, and the external UAV bridge must independently enforce the same final-height constraint.
+
+## Key Scripts
+
+| Path | Responsibility |
 |---|---|
-| `F6` | 注入候選目標 |
-| `F7` | 模擬命令已接受 |
-| `F8` | 模擬命令執行中 |
-| `F9` | 模擬已抵達目標 |
-| `F10` | 模擬命令被拒絕 |
-| `F11` | 清除測試資料 |
+| `Assets/Script/UAVDashboard/CompressedImageUIReceiver.cs` | Receives compressed images and updates the live `RawImage` |
+| `Assets/Script/UAVDashboard/TargetCandidateData.cs` | Defines message data models and the shared rosbridge endpoint |
+| `Assets/Script/UAVDashboard/TargetCandidateSubscriber.cs` | Subscribes to and parses candidate JSON packets |
+| `Assets/Script/UAVDashboard/TargetSelectionUIController.cs` | Controls candidate navigation, readiness, previews, and operator actions |
+| `Assets/Script/UAVDashboard/TargetCommandPublisher.cs` | Publishes confirm/cancel commands and tracks command responses |
+| `Assets/Script/UAVDashboard/UavRosBridgeStateReceiver.cs` | Receives telemetry and IMU data and updates the Cesium UAV model |
+| `Assets/Script/UAVDashboard/TargetCandidateMockTester.cs` | Injects local candidates and command states for UI testing |
 
-## 目錄重點
+## Testing Without ROS
 
-```text
-Assets/
-├── CesiumSettings/       # Cesium 設定
-├── drone_model/          # UAV 3D 模型
-├── model/                # 機器人與感測器模型
-├── Plugins/              # ROS#、OpenCV 與其他外掛
-├── Resources/            # 執行期載入資源
-├── Scenes/               # Unity 場景
-├── Script/
-│   ├── UAVDashboard/     # 目標確認與自動飛行介面
-│   ├── PointCloudStreaming/
-│   ├── RTT_scripts/
-│   ├── HandTracking_control/
-│   └── stretch_control/
-└── StreamingAssets/      # 執行期串流資源
-```
+Add `TargetCandidateMockTester` to a scene object and assign its subscriber and publisher references. The default test keys are:
 
-## 安全注意事項
+| Key | Action |
+|---|---|
+| `F6` | Inject mock candidates |
+| `F7` | Simulate an accepted command |
+| `F8` | Simulate command execution |
+| `F9` | Simulate arrival at the target |
+| `F10` | Simulate a rejected command |
+| `F11` | Clear the mock data |
 
-本專案會發布可能影響實體 UAV 的飛行命令。實機測試前請先完成模擬器與 Mock 測試，確認 GPS、座標系、返航／失聯策略、地理圍欄、飛行模式及緊急停止機制皆正確。操作員應全程保有接管能力，並遵守當地無人機法規與場域安全規範。
+## Troubleshooting
+
+### The Unity project opens with missing packages
+
+- Confirm that Git is installed and available to Unity Package Manager.
+- Open **Window > Package Manager** and allow Git-based packages to finish resolving.
+- Verify that `Packages/manifest.json` and `Packages/packages-lock.json` are present.
+
+### The dashboard does not receive ROS data
+
+- Confirm that rosbridge is running and reachable on port `9090`.
+- Verify the address in `UavDashboardRos.OrinRosBridgeUrl`.
+- Confirm that the topic names and ROS message types match the table above.
+- Check that the ROS publishers are actively sending current rather than stale data.
+
+### The Confirm button remains disabled
+
+- Check `ready_for_confirm` and the `confirm_blockers` array in the candidate packet.
+- Confirm that a non-expired candidate is selected.
+- Confirm that no command is already pending.
+- Review the displayed positioning, altitude, flight-mode, and flight-control readiness information.
+
+### A standalone build starts with an empty scene
+
+Add `Assets/Scenes/Image_Process.unity` to the Unity build-scene list before building.
+
+## Scope and Limitations
+
+This repository is complete as the **Unity client project**: it includes `Assets`, `Packages`, and `ProjectSettings`. It does not include the ROS detection pipeline, rosbridge deployment, autopilot configuration, or the external flight-control bridge. Those services must be configured separately for the end-to-end system to operate.
 
 ## License
 
-目前尚未指定開源授權。除非另有書面許可，請勿將本專案內容用於未授權的散布或商業用途；第三方套件與模型仍各自受其原始授權條款約束。
+No project-wide open-source license has been assigned. Third-party packages, plug-ins, models, and sample assets remain subject to their respective licenses.
